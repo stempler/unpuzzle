@@ -3,3 +3,8 @@ build
 .groovy
 .settings
 .nb-*
+
+# Eclipse
+libs/*/bin
+.project
+.classpath
