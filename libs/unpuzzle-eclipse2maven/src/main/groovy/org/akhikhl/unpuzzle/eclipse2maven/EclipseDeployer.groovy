@@ -145,6 +145,35 @@ final class EclipseDeployer {
       console.endProgress()
     }
   }
+  
+  private void addPackageDependencies() {
+    // create package index
+    console.startProgress("Building index of exported packages")
+    PackageIndex index = new PackageIndex(console: console)
+    try {
+      artifacts.each { name, artifactVersions ->
+        artifactVersions.each { pom ->
+          File bundleFile = artifactFiles["${pom.artifact}:${pom.version}"]
+          index.addBundle(pom, bundleFile)
+        }
+      }
+    } finally {
+      console.endProgress()
+    }
+
+    // add dependencies based on package imports
+    console.startProgress("Determining package-based dependencies based on package imports")
+    try {
+      artifacts.each { name, artifactVersions ->
+        artifactVersions.each { pom ->
+          File bundleFile = artifactFiles["${pom.artifact}:${pom.version}"]
+          index.extendDependencies(pom, bundleFile)
+        }
+      }
+    } finally {
+      console.endProgress()
+    }
+  }
 
   void deploy(List<EclipseSource> sources) {
 
@@ -180,6 +209,12 @@ installGroupPath=$installGroupPath"""
         collectArtifactsInFolder(source, pluginFolder)
       }
     }
+
+    /*
+     * FIXME the package index should be built on all bundles,
+     * not only those not installed yet
+     */
+    addPackageDependencies()
 
     fixDependencies()
 
