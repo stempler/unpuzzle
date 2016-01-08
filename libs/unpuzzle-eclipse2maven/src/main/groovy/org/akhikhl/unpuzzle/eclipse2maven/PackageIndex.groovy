@@ -8,6 +8,8 @@ import org.akhikhl.unpuzzle.osgi2maven.Pom
 import org.akhikhl.unpuzzle.utils.IConsole
 import org.akhikhl.unpuzzle.utils.SysConsole;
 import org.osgi.framework.Constants
+import org.osgi.framework.VersionRange
+import org.osgi.framework.Version as OSGiVersion
 
 import aQute.bnd.header.OSGiHeader
 import aQute.bnd.header.Parameters
@@ -17,7 +19,7 @@ import groovy.transform.Immutable;
 @CompileStatic
 class PackageProvider {
   Pom bundle
-  String packageVersion
+  OSGiVersion packageVersion
 }
 
 /**
@@ -44,7 +46,7 @@ class PackageIndex {
 
     pkgs.each { pkg, attrs ->
       def pkgVersion = attrs[Constants.VERSION_ATTRIBUTE]
-      putPackage(pkg, pkgVersion, pom)
+      putPackage(pkg, new OSGiVersion(pkgVersion ?: '0.0.0'), pom)
     }
   }
 
@@ -61,7 +63,7 @@ class PackageIndex {
     manifest
   }
 
-  private putPackage(String pkg, String version, Pom bundle) {
+  private putPackage(String pkg, OSGiVersion version, Pom bundle) {
     def provider = new PackageProvider(bundle: bundle, packageVersion: version)
 
     def providerList = index[pkg]
@@ -88,11 +90,12 @@ class PackageIndex {
     def deps = [:]
     pkgs.each { pkg, attrs ->
       def pkgVersion = attrs[Constants.VERSION_ATTRIBUTE]
+      VersionRange versionRange = new VersionRange(pkgVersion ?: '0.0.0')
+      
       def optional = attrs[Constants.RESOLUTION_DIRECTIVE] == Constants.RESOLUTION_OPTIONAL
-      //FIXME version is ignored for now
       //FIXME optional is ignored for now
 
-      def candidates = findPackage(pkg)
+      def candidates = findPackage(pkg, versionRange)
       if (candidates) {
         if (candidates.size() > 1) {
           //FIXME strategy to select?
@@ -128,6 +131,7 @@ class PackageIndex {
       bundles.add(dep.name)
     }
 
+    // add additional bundles that were identified through package imports
     for (Pom dependency : dependenciesToAdd) {
       if (!bundles.contains(dependency.artifact)) {
         parent.dependencyBundles << new DependencyBundle(
@@ -145,12 +149,16 @@ class PackageIndex {
   /**
    * Find possible providers for a package.
    * @param pgk the package that should be provided
+   * @param versions the allowed version range
    * @return the list of package providers exporting the package
    */
-  List<PackageProvider> findPackage(String pkg) {
-    //FIXME add version information to the call
-
-    (index[pkg]?:[]).asImmutable()
+  List<PackageProvider> findPackage(String pkg, VersionRange versions) {
+    def providers = index[pkg]?:[]
+    
+    // yield only package providers that lie in the version range
+    providers.findAll { provider ->
+      versions.includes(provider.packageVersion)
+    }
   }
 
 }
