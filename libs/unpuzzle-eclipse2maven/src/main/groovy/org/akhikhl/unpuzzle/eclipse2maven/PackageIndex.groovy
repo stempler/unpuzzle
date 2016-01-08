@@ -18,8 +18,18 @@ import groovy.transform.Immutable;
 
 @CompileStatic
 class PackageProvider {
+  /** The bundle that is the provider */
   Pom bundle
+  /** The version of the package that is provided */
   OSGiVersion packageVersion
+}
+
+@CompileStatic
+class PackageDependency {
+  /** The bundle that provides the dependency */
+  Pom bundle
+  /** If the dependency is optional */
+  boolean optional
 }
 
 /**
@@ -29,6 +39,7 @@ class PackageIndex {
 
   IConsole console = new SysConsole()
 
+  /** The index map on collected exported packages */
   private Map<String, List<PackageProvider>> index = [:]
 
   /**
@@ -50,6 +61,12 @@ class PackageIndex {
     }
   }
 
+  /**
+   * Load manifest information from a bundle.
+   * 
+   * @param dirOrJar the directory or Jar file representing the bundle
+   * @return the loaded manifest
+   */
   private Manifest loadManifest(File dirOrJar) {
     Manifest manifest
     if (dirOrJar.isDirectory()) {
@@ -63,7 +80,14 @@ class PackageIndex {
     manifest
   }
 
-  private putPackage(String pkg, OSGiVersion version, Pom bundle) {
+  /**
+   * Add a package to the index.
+   * 
+   * @param pkg the full qualified package name
+   * @param version the package version that is provided
+   * @param bundle the bundle that provides the package
+   */
+  private void putPackage(String pkg, OSGiVersion version, Pom bundle) {
     def provider = new PackageProvider(bundle: bundle, packageVersion: version)
 
     def providerList = index[pkg]
@@ -87,67 +111,126 @@ class PackageIndex {
     String imports = manifest.mainAttributes.getValue(Constants.IMPORT_PACKAGE)
     Parameters pkgs = OSGiHeader.parseHeader(imports)
 
+    // dependencies are bundle symbolic names mapped to PackageDependency
     def deps = [:]
+    
     pkgs.each { pkg, attrs ->
       def pkgVersion = attrs[Constants.VERSION_ATTRIBUTE]
       VersionRange versionRange = new VersionRange(pkgVersion ?: '0.0.0')
       
-      def optional = attrs[Constants.RESOLUTION_DIRECTIVE] == Constants.RESOLUTION_OPTIONAL
-      //FIXME optional is ignored for now
-
+      def optional = (attrs[Constants.RESOLUTION_DIRECTIVE + ':'] == Constants.RESOLUTION_OPTIONAL)
+      
       def candidates = findPackage(pkg, versionRange)
       if (candidates) {
         if (candidates.size() > 1) {
-          //FIXME strategy to select?
-          //XXX in some cases multiple, in some cases only one is applicable
-          //XXX prefer dependency that is already added via require-bundle?
+          // XXX strategy to select/exclude dependencies cannot be decided here,
+          // configuration is needed to adapt behavior as needed
+          
+          // by default, add all dependencies
+          candidates.each { candidate ->
+            collectDependency(pom, deps, candidate, optional)
+          }
+          
+          // warn that there were multiple providers of the same package
           def names = candidates.collect {
             it.bundle.artifact + ':' + it.bundle.version
           }
-          console.progressError("Multiple candidates for imported package $pkg: $names")
+          console.info("[warn] Multiple candidates for imported package $pkg: $names")
         }
         else {
-          def candidate = candidates[0].bundle
-          if (pom.artifact != candidate.artifact) {
-            if (deps[candidate.artifact]) {
-              //TODO check if there is a version conflict?
-            }
-            else {
-              // dependency not added yet
-              deps[candidate.artifact] = candidate
-            }
-          }
+          // add uniquely identified dependency for package
+          collectDependency(pom, deps, candidates[0], optional)
+        }
+      }
+      else {
+        if (optional) {
+          console.info("[warn] No bundle found providing optional package $pkg")
+        }
+        else {
+          console.info("[warn] No bundle found providing package $pkg")
         }
       }
     }
 
     mergeDependencies(pom, deps.values())
   }
+  
+  /**
+   * Collect the given dependency and at to the host's dependency map.
+   * 
+   * @param host the Pom describing the bundle we collect dependencies for
+   * @param deps the map of dependencies for the host, bundle symbolic names
+   *   mapped to PackageDependency
+   * @param toAdd the dependency to add
+   * @param optional if the dependency is optional
+   */
+  private void collectDependency(Pom host, deps, PackageProvider toAdd, boolean optional) {
+    def candidate = toAdd.bundle
+    if (host.artifact != candidate.artifact) { // don't add self as dependency
+      PackageDependency current = deps[candidate.artifact]
+      if (current) {
+        // bundle is already added as dependency
+        
+        // mandatory overrides optional
+        if (!optional) {
+          current.optional = false
+        }
+        
+        // use the dependency with the higher version number
+        try {
+          OSGiVersion currentVersion = new OSGiVersion(current.bundle.version ?: '0.0.0')
+          OSGiVersion toAddVersion = new OSGiVersion(toAdd.bundle.version ?: '0.0.0')
+          if (toAddVersion.compareTo(currentVersion) > 0) {
+            // higher version number -> replace dependency
+            current.bundle = toAdd.bundle
+          }
+        } catch (e) {
+          // if this happens, likely the versions were no proper OSGi versions
+          // still, this is probably not fatal (or fails at a different point anyway)
+          console.progressError("Error comparing dependency versions")
+          e.printStackTrace()
+        }
+      }
+      else {
+        // dependency not added yet -> simply add
+        deps[candidate.artifact] = new PackageDependency(bundle: candidate, optional: optional)
+      }
+    }
+  }
 
-  private void mergeDependencies(Pom parent, Collection<Pom> dependenciesToAdd) {
+  /**
+   * Merge package dependencies into existing bundle dependencies.
+   * 
+   * @param parent the Pom representing the bundle dependencies should be added to
+   * @param dependenciesToAdd the dependencies to add to the bundle
+   */
+  private void mergeDependencies(Pom parent, Collection<PackageDependency> dependenciesToAdd) {
     // collect names of bundles already added
     def bundles = new HashSet<String>()
     for (DependencyBundle dep : parent.dependencyBundles) {
       bundles.add(dep.name)
     }
 
-    // add additional bundles that were identified through package imports
-    for (Pom dependency : dependenciesToAdd) {
-      if (!bundles.contains(dependency.artifact)) {
+    // add _additional_ bundles that were identified through package imports
+    // i.e. information from RequireBundle is preferred 
+    for (PackageDependency dependency : dependenciesToAdd) {
+      if (!bundles.contains(dependency.bundle.artifact)) {
         parent.dependencyBundles << new DependencyBundle(
-            group: dependency.group,
-            name: dependency.artifact,
-            resolution: Constants.RESOLUTION_MANDATORY,
+            group: dependency.bundle.group,
+            name: dependency.bundle.artifact,
+            resolution: dependency.optional ? Constants.RESOLUTION_OPTIONAL : Constants.RESOLUTION_MANDATORY,
             visibility: Constants.VISIBILITY_PRIVATE,
-            version: dependency.version)
+            version: dependency.bundle.version)
 
-        console.info("Adding dependency ${parent.artifact} -> ${dependency.artifact}")
+        def optionalMsg = dependency.optional ? ' (optional)' : ''
+        console.info("Adding dependency ${parent.artifact} -> ${dependency.bundle.artifact}$optionalMsg")
       }
     }
   }
 
   /**
    * Find possible providers for a package.
+   * 
    * @param pgk the package that should be provided
    * @param versions the allowed version range
    * @return the list of package providers exporting the package
