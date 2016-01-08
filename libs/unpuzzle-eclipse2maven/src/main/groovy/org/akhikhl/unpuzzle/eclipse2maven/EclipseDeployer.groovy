@@ -146,21 +146,27 @@ final class EclipseDeployer {
     }
   }
   
-  private void addPackageDependencies() {
-    // create package index
-    console.startProgress("Building index of exported packages")
-    PackageIndex index = new PackageIndex(console: console)
-    try {
-      artifacts.each { name, artifactVersions ->
-        artifactVersions.each { pom ->
-          File bundleFile = artifactFiles["${pom.artifact}:${pom.version}"]
-          index.addBundle(pom, bundleFile)
-        }
+  private void addToPackageIndex(EclipseSource source, artifactsSourceDir, PackageIndex index) {
+    def processFile = { File file ->
+      Bundle2Pom reader = new Bundle2Pom(group: eclipseGroup, dependencyGroup: eclipseGroup)
+      Pom pom = reader.convert(file)
+      def source_match = pom.artifact =~ /(.*)\.source/
+      if(!source_match) {
+        index.addBundle(pom, file)
       }
-    } finally {
-      console.endProgress()
     }
-
+    if (!source.sourcesOnly) { // sources with only sources can be skipped
+      console.startProgress("Building index of exported packages for bundles in $artifactsSourceDir")
+      try {
+        artifactsSourceDir.eachDir processFile
+        artifactsSourceDir.eachFileMatch ~/.*\.jar/, processFile
+      } finally {
+        console.endProgress()
+      }
+    }
+  }
+  
+  private void addPackageDependencies(PackageIndex index) {
     // add dependencies based on package imports
     console.startProgress("Determining package-based dependencies based on package imports")
     try {
@@ -182,6 +188,8 @@ final class EclipseDeployer {
     installedCheckumsInfoFile.text = """eclipseGroup=$eclipseGroup
 installGroupPath=$installGroupPath"""
 
+    PackageIndex index = new PackageIndex(console: console)
+    
     for(EclipseSource source in sources) {
       String url = source.url
       String fileName = url.substring(url.lastIndexOf('/') + 1)
@@ -198,23 +206,22 @@ installGroupPath=$installGroupPath"""
           installedChecksum = installedChecksumFile.text
         packageInstalled = downloadedChecksum == installedChecksum
       }
-      if(!packageInstalled) {
-        File pluginFolder = new File(unpackDir, 'Contents/Eclipse/plugins')
+      File pluginFolder = new File(unpackDir, 'Contents/Eclipse/plugins')
+      if (!pluginFolder.exists()) {
+        pluginFolder = new File(unpackDir, 'plugins')
         if (!pluginFolder.exists()) {
-          pluginFolder = new File(unpackDir, 'plugins')
-          if (!pluginFolder.exists()) {
-            pluginFolder = unpackDir
-          }
+          pluginFolder = unpackDir
         }
+      }
+      if(!packageInstalled) {
         collectArtifactsInFolder(source, pluginFolder)
       }
+      // all bundles are added to the package index
+      addToPackageIndex(source, pluginFolder, index)
     }
 
-    /*
-     * FIXME the package index should be built on all bundles,
-     * not only those not installed yet
-     */
-    addPackageDependencies()
+    // augment pom's with dependencies based on package imports
+    addPackageDependencies(index)
 
     fixDependencies()
 
