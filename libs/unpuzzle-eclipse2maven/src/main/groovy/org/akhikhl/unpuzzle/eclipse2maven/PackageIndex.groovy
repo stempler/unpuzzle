@@ -13,9 +13,13 @@ import org.osgi.framework.Version as OSGiVersion
 
 import aQute.bnd.header.OSGiHeader
 import aQute.bnd.header.Parameters
+import groovy.json.JsonOutput;
 import groovy.transform.CompileStatic;
 import groovy.transform.Immutable;
 
+/**
+ * Represents a package provider in the package index map.
+ */
 @CompileStatic
 class PackageProvider {
   /** The bundle that is the provider */
@@ -24,6 +28,9 @@ class PackageProvider {
   OSGiVersion packageVersion
 }
 
+/**
+ * Represents a collected package dependency to merge with other dependencies of the bundle.
+ */
 @CompileStatic
 class PackageDependency {
   /** The bundle that provides the dependency */
@@ -41,6 +48,12 @@ class PackageIndex {
 
   /** The index map on collected exported packages */
   private Map<String, List<PackageProvider>> index = [:]
+  
+  /** Collected information on mandatory imports that could not be met */
+  private Map<String, List<Map<String, String>>> mandatoryNotFound = [:]
+  
+  /** Collected information on optional imports that could not be met */
+  private Map<String, List<Map<String, String>>> optionalNotFound = [:]
 
   /**
    * Add a bundle to the package index.
@@ -143,12 +156,7 @@ class PackageIndex {
         }
       }
       else {
-        if (optional) {
-          console.info("[warn] No bundle found providing optional package $pkg")
-        }
-        else {
-          console.info("[warn] No bundle found providing package $pkg")
-        }
+        logPackageNotFound(pkg, versionRange.toString(), pom.artifact, optional)
       }
     }
 
@@ -242,6 +250,39 @@ class PackageIndex {
     providers.findAll { provider ->
       versions.includes(provider.packageVersion)
     }
+  }
+  
+  private def logPackageNotFound(String pkg, String version, String bundle, boolean optional) {
+    //TODO ignore specific packages? e.g. built-in stuff like javax.swing?
+    
+    // console messages
+    if (optional) {
+      console.info("[warn] No bundle found providing optional package $pkg")
+    }
+    else {
+      console.info("[warn] No bundle found providing package $pkg")
+    }
+    
+    // store information for report
+    def info = [bundle: bundle, requiresVersion: version]
+    logPackageNotFound(optional ? optionalNotFound : mandatoryNotFound, pkg, info)
+  }
+  
+  private def logPackageNotFound(Map<String, List<Map<String, String>>> map, String pkg, Map<String, String> info) {
+    def list = map[pkg]
+    if (!list) {
+      list = []
+      map[pkg] = list
+    }
+    list << info
+  }
+  
+  def writeReports(File reportDir) {
+    // package not found reports
+    File mandatoryFile = new File(reportDir, 'unsatisfiedPackages-mandatory.json')
+    mandatoryFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(mandatoryNotFound))
+    File optionalFile = new File(reportDir, 'unsatisfiedPackages-optional.json')
+    optionalFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(optionalNotFound))
   }
 
 }

@@ -223,6 +223,9 @@ installGroupPath=$installGroupPath"""
     // augment pom's with dependencies based on package imports
     addPackageDependencies(index)
 
+    // write package dependencies report files
+    index.writeReports(targetDir)
+    
     fixDependencies()
 
     console.startProgress('Deploying artifacts')
