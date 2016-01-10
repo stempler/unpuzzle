@@ -162,11 +162,16 @@ unpuzzle {
     }
   }
 
+  dependencies {
+    // a bundle can be excluded completely
+    exclude('bundleToExclude')
+  }
+
   uploadEclipse = [
     url: 'http://example.com/repository',
     user: 'someUser',
     password: 'somePassword'
-  ]  
+  ]
 }
 ```
 

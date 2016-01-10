@@ -36,6 +36,7 @@ final class EclipseDeployer {
   private final File targetDir
   private final String eclipseGroup
   private final Deployer mavenDeployer
+  private final DependenciesConfig depConfig
   private final IConsole console
   private final String installGroupPath
   private final String installGroupChecksum
@@ -44,10 +45,13 @@ final class EclipseDeployer {
   private Map artifactFiles = [:]
   private Map sourceFiles = [:]
 
-  EclipseDeployer(File targetDir, String eclipseGroup, Deployer mavenDeployer, IConsole console = null) {
+  EclipseDeployer(File targetDir, String eclipseGroup, Deployer mavenDeployer,
+    IConsole console = null, DependenciesConfig depConfig = new DependenciesConfig()) {
+    
     this.targetDir = targetDir
     this.eclipseGroup = eclipseGroup
     this.mavenDeployer = mavenDeployer
+    this.depConfig = depConfig
     this.console = console ?: new SysConsole()
     installGroupPath = mavenDeployer.repositoryUrl.toString() + '/' + (eclipseGroup ? eclipseGroup.replace('.', '/') : '')
     installGroupChecksum = DigestUtils.md5Hex(installGroupPath)
@@ -113,21 +117,35 @@ final class EclipseDeployer {
       try {
         Bundle2Pom reader = new Bundle2Pom(group: eclipseGroup, dependencyGroup: eclipseGroup)
         Pom pom = reader.convert(file)
+        if (depConfig.isExcluded(pom.artifact)) {
+          return
+        }
+        
         def source_match = pom.artifact =~ /(.*)\.source/
         if(source_match) {
           def artifact = source_match[0][1]
-          sourceFiles["${artifact}:${pom.version}"] = file
+          if (!depConfig.isExcluded(artifact)) {
+            sourceFiles["${artifact}:${pom.version}"] = file
+          }
         } else if(!source.sourcesOnly) {
           def nl_match = pom.artifact =~ /(.*)\.nl_(.*)/
+          boolean excluded = false
           if(nl_match) {
             def artifact = nl_match[0][1]
             def language = nl_match[0][2]
-            if(!artifactsNl[language])
-              artifactsNl[language] = [:]
-            artifactsNl[language][artifact] = pom
+            if (!depConfig.isExcluded(artifact)) {
+              if(!artifactsNl[language]) {
+                artifactsNl[language] = [:]
+              }
+              artifactsNl[language][artifact] = pom
+            }
+            else {
+              return
+            }
           } else if(!source.languagePacksOnly) {
-            if(!artifacts.containsKey(pom.artifact))
+            if(!artifacts.containsKey(pom.artifact)) {
               artifacts[pom.artifact] = []
+            }
             artifacts[pom.artifact].add pom
           }
           artifactFiles["${pom.artifact}:${pom.version}"] = file
@@ -151,7 +169,7 @@ final class EclipseDeployer {
       Bundle2Pom reader = new Bundle2Pom(group: eclipseGroup, dependencyGroup: eclipseGroup)
       Pom pom = reader.convert(file)
       def source_match = pom.artifact =~ /(.*)\.source/
-      if(!source_match) {
+      if(!source_match && !depConfig.isExcluded(pom.artifact)) {
         index.addBundle(pom, file)
       }
     }

@@ -8,3 +8,6 @@ build
 libs/*/bin
 .project
 .classpath
+
+# Linux
+*~

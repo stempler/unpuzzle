@@ -7,6 +7,7 @@
  */
 package org.akhikhl.unpuzzle
 
+import org.akhikhl.unpuzzle.eclipse2maven.DependenciesConfig
 import org.akhikhl.unpuzzle.eclipse2maven.EclipseDeployer
 import org.akhikhl.unpuzzle.eclipse2maven.EclipseSource
 import org.gradle.api.GradleException
@@ -26,6 +27,10 @@ class Config {
   Map<String, List<Closure>> lazyVersions = [:]
   private Map<String, EclipseVersionConfig> versionConfigs = null
   Map uploadEclipse = [:]
+  DependenciesConfig dependenciesConfig = new DependenciesConfig()
+  def dependencies(Closure cl) {
+    dependenciesConfig.call(cl)
+  }
 
   // use this only for testing/debugging!
   boolean dryRun = false
@@ -96,6 +101,7 @@ class Config {
       targetClosureList.addAll(sourceClosureList)
     }
     target.uploadEclipse << source.uploadEclipse
+    target.dependenciesConfig = source.dependenciesConfig
     if(source.dryRun)
       target.dryRun = true
   }
