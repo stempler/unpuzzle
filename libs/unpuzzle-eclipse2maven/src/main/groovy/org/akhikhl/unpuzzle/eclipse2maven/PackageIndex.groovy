@@ -54,6 +54,12 @@ class PackageIndex {
   
   /** Collected information on optional imports that could not be met */
   private Map<String, List<Map<String, String>>> optionalNotFound = [:]
+  
+  /** 
+   * Collected information on multiple candidates being found for an import
+   * (which have a potential for conflicts)
+   */
+  private Map<String, Map<String, ?>> multipleCandidatesFound = [:]
 
   /**
    * Add a bundle to the package index.
@@ -144,11 +150,7 @@ class PackageIndex {
             collectDependency(pom, deps, candidate, optional)
           }
           
-          // warn that there were multiple providers of the same package
-          def names = candidates.collect {
-            it.bundle.artifact + ':' + it.bundle.version
-          }
-          console.info("[warn] Multiple candidates for imported package $pkg: $names")
+          logMultipleCandidates(pkg, versionRange.toString(), pom.artifact, candidates)
         }
         else {
           // add uniquely identified dependency for package
@@ -277,12 +279,44 @@ class PackageIndex {
     list << info
   }
   
+  private def logMultipleCandidates(String pkg, String version, String bundle, List<PackageProvider> candidates) {
+    // warn that there were multiple providers of the same package
+    def names = candidates.collect {
+      it.bundle.artifact + ':' + it.bundle.version
+    }
+    console.info("[warn] Multiple candidates for imported package $pkg: $names")
+    
+    // store information for report
+    def candidateMaps = candidates.collect { PackageProvider p ->
+      [bundle: p.bundle.artifact, version: p.bundle.version, providesVersion: p.packageVersion.toString()]
+    }
+    def incident = [bundleExample: bundle, requiresVersion: version, candidates: candidateMaps]
+    def oldIncident = multipleCandidatesFound[pkg]
+    if (!oldIncident) {
+      // no such incident yet
+      incident.similarIncidents = 0
+      multipleCandidatesFound[pkg] = incident
+    }
+    else if (oldIncident && oldIncident.candidates && oldIncident.candidates.size() < candidates.size()) {
+      // replace incident
+      incident.similarIncidents = oldIncident.similarIncidents + 1
+      multipleCandidatesFound[pkg] = incident
+    }
+    else {
+      oldIncident.similarIncidents++
+    }
+  }
+  
   def writeReports(File reportDir) {
     // package not found reports
     File mandatoryFile = new File(reportDir, 'unsatisfiedPackages-mandatory.json')
     mandatoryFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(mandatoryNotFound))
     File optionalFile = new File(reportDir, 'unsatisfiedPackages-optional.json')
     optionalFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(optionalNotFound))
+    
+    // report on multiple candidates for package imports
+    File multipleFile = new File(reportDir, 'packageExportOverlaps.json')
+    multipleFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(multipleCandidatesFound))
   }
 
 }
