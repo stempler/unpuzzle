@@ -278,7 +278,37 @@ installGroupPath=$installGroupPath"""
     try {
       artifacts.each { name, artifactVersions ->
         console.info("Fixing dependencies: $name")
-        artifactVersions.each { pom ->
+        artifactVersions.each { Pom pom ->
+          
+          // collect dependency names
+          Set<String> dependencyNames = new HashSet<String>()
+          pom.dependencyBundles.each { DependencyBundle reqBundle ->
+            dependencyNames << reqBundle.name.trim()
+          }
+          
+          // apply replacements
+          pom.dependencyBundles.removeAll { DependencyBundle reqBundle ->
+            def replacement = depConfig.getReplacement(reqBundle.name.trim())
+            if (replacement) {
+              if (!dependencyNames.contains(replacement)) {
+                // replace only if not yet a dependency
+                
+                // replace bundle name
+                reqBundle.name = replacement
+                
+                return false
+              }
+              else {
+                // remove dependency - replacement is already a dependency
+                return true
+              }
+            } else {
+              // keep dependency as-is
+              return false
+            }
+          }
+          
+          // remove all dependencies that cannot be found (for any version)
           pom.dependencyBundles.removeAll { reqBundle ->
             if(!artifacts[reqBundle.name.trim()]) {
               console.info("Warning: artifact dependency $pom.group:$pom.artifact:$pom.version -> $reqBundle.name could not be resolved.")
@@ -286,6 +316,7 @@ installGroupPath=$installGroupPath"""
             }
             return false
           }
+          
           pom.dependencyBundles.each { reqBundle ->
             def resolvedVersions = artifacts[reqBundle.name.trim()]
             if(resolvedVersions.size() == 1)

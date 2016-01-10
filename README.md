@@ -165,6 +165,12 @@ unpuzzle {
   artifacts {
     // a bundle can be excluded completely
     exclude('bundleToExclude')
+
+    // or replaced by a different bundle,
+    // e.g. if you have two differently named bundles with the same library
+    bundle('slf4j.api') {
+      replaceWith 'org.slf4j.api'
+    }
   }
 
   uploadEclipse = [
