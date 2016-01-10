@@ -162,7 +162,7 @@ unpuzzle {
     }
   }
 
-  dependencies {
+  artifacts {
     // a bundle can be excluded completely
     exclude('bundleToExclude')
   }

@@ -28,7 +28,7 @@ class Config {
   private Map<String, EclipseVersionConfig> versionConfigs = null
   Map uploadEclipse = [:]
   DependenciesConfig dependenciesConfig = new DependenciesConfig()
-  def dependencies(Closure cl) {
+  def artifacts(Closure cl) {
     dependenciesConfig.call(cl)
   }
 
