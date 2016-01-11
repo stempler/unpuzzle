@@ -198,6 +198,12 @@ unpuzzle {
       }
     }
 
+    // for artifacts that are not deployed (like the above example)
+    // you can enable that they should be verified by trying to resolve
+    // them through the Maven repositories configured in the project
+    // (disabled by default)
+    verifyIfNoDeploy = false
+
     // artifacts can also be adapted in a more general manner with a configuration
     // that is applied to all bundles (currently only one use of all { ... } is supported)
     all {

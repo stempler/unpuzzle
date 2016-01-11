@@ -50,7 +50,7 @@ class DependenciesConfig {
     
   }
   
-  // configuration properties
+  // internal configuration properties (adapted via method calls)
   
   /** Set of bundle names for bundles that should be generally excluded */
   protected final Set<String> excludedBundles = new HashSet<String>()
@@ -63,6 +63,14 @@ class DependenciesConfig {
   
   /** Artifact configuration closure to apply for all bundles */
   protected Closure allBundlesArtifactConfig
+  
+  // public configuration properties
+  
+  /**
+   * Enable/disable verifying the availability of artifacts that are not deployed by
+   * trying to resolve them via the projects dependencies.
+   */
+  boolean verifyIfNoDeploy = false
   
   // main call
   

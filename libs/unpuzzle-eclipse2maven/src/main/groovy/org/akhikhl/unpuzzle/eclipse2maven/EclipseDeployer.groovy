@@ -37,6 +37,7 @@ final class EclipseDeployer {
   private final String eclipseGroup
   private final Deployer mavenDeployer
   private final DependenciesConfig depConfig
+  private final Closure verifyDependency
   private final IConsole console
   private final String installGroupPath
   private final String installGroupChecksum
@@ -46,12 +47,14 @@ final class EclipseDeployer {
   private Map sourceFiles = [:]
 
   EclipseDeployer(File targetDir, String eclipseGroup, Deployer mavenDeployer,
-    IConsole console = null, DependenciesConfig depConfig = new DependenciesConfig()) {
+    IConsole console = null, DependenciesConfig depConfig = new DependenciesConfig(),
+    Closure verifyDependency = null) {
     
     this.targetDir = targetDir
     this.eclipseGroup = eclipseGroup
     this.mavenDeployer = mavenDeployer
     this.depConfig = depConfig
+    this.verifyDependency = verifyDependency
     this.console = console ?: new SysConsole()
     installGroupPath = mavenDeployer.repositoryUrl.toString() + '/' + (eclipseGroup ? eclipseGroup.replace('.', '/') : '')
     installGroupChecksum = DigestUtils.md5Hex(installGroupPath)
@@ -306,6 +309,8 @@ installGroupPath=$installGroupPath"""
   }
   
   private applyArtifactModifications(ArtifactModManager mods) {
+    def verifyDependencies = new HashSet<String>()
+    
     console.startProgress('Applying artifact modifications')
     try {
       artifacts.each { name, artifactVersions ->
@@ -328,11 +333,20 @@ installGroupPath=$installGroupPath"""
               sourceFiles[fileIdent] = sourceFile
             }
           }
+          else {
+            // should not be deployed
+            // collect for verification
+            verifyDependencies << "$pom.group:$pom.artifact:$pom.version" as String
+          }
           
           // update all dependencies
-          pom.dependencyBundles.each { depBundle ->
+          pom.dependencyBundles.each { DependencyBundle depBundle ->
             ArtifactConfig depConfig = mods.getConfig(depBundle)
             depConfig.apply(depBundle)
+            if (!depConfig.deploy) {
+              // collect for verification
+              verifyDependencies << "$depBundle.group:$depBundle.name:$depBundle.version" as String
+            }
           }
         }
       }
@@ -340,6 +354,28 @@ installGroupPath=$installGroupPath"""
       //TODO handle artifactsNl as well?
     } finally {
       console.endProgress()
+    }
+    
+    // verify dependencies that are not deployed but should reference
+    // an artifact that is available already
+    if (depConfig.verifyIfNoDeploy) {
+      console.startProgress('Verifying artifacts that are not deployed')
+      try {
+        console.info(verifyDependencies.size() + ' artifacts to verify...')
+        if (verifyDependency == null) {
+          throw new IllegalStateException('Handler for verifying artifact not available')
+        }
+        
+        verifyDependencies.each { dep ->
+          boolean valid = verifyDependency(dep)
+          if (!valid) {
+            throw new IllegalStateException("Validation failed: Could not resolve dependency $dep")
+          }
+        }  
+      }
+      finally {
+        console.endProgress()
+      }
     }
   }
 
