@@ -308,7 +308,7 @@ installGroupPath=$installGroupPath"""
     return mods
   }
   
-  private applyArtifactModifications(ArtifactModManager mods) {
+  private applyArtifactModifications(ArtifactModManager mods, boolean skipVerify = false) {
     def verifyDependencies = new HashSet<String>()
     
     console.startProgress('Applying artifact modifications')
@@ -358,7 +358,7 @@ installGroupPath=$installGroupPath"""
     
     // verify dependencies that are not deployed but should reference
     // an artifact that is available already
-    if (depConfig.verifyIfNoDeploy) {
+    if (!skipVerify && depConfig.verifyIfNoDeploy) {
       console.startProgress('Verifying artifacts that are not deployed')
       try {
         console.info(verifyDependencies.size() + ' artifacts to verify...')
@@ -525,7 +525,7 @@ installGroupPath=$installGroupPath"""
     
     // apply artifact modifications to Poms, dependencies and files
     if (mods) {
-      applyArtifactModifications(mods)
+      applyArtifactModifications(mods, true)
     }
 
     def deleteArtifactDir = { Pom pom ->
