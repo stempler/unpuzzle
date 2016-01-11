@@ -401,7 +401,7 @@ installGroupPath=$installGroupPath"""
           // fix version of dependencies based on available artifacts
           pom.dependencyBundles.each { reqBundle ->
             def resolvedVersions = artifacts[reqBundle.name.trim()]
-            if (resolvedVersions.isEmpty()) {
+            if (!resolvedVersions || resolvedVersions.isEmpty()) {
               /*
                * Ignore - missing dependency that is not deployed (otherwise it
                * would have been removed in the previous step). 
