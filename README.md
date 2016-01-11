@@ -171,6 +171,25 @@ unpuzzle {
     bundle('slf4j.api') {
       replaceWith 'org.slf4j.api'
     }
+
+    // artifacts can be adapted, for instance change artifact group, name or version
+    // or prevent deployment because an existing Maven artifact should be used (e.g. from Maven Central)
+    bundle('org.slf4j.api') {
+      artifact {
+        group = 'org.slf4j'
+        name = 'slf4j-api'
+        // version = stripQualifier(version)
+        deploy = false
+      }
+    }
+
+    // artifacts can also be adapted in a more general manner with a configuration
+    // that is applied to all bundles (currently only one use of all { ... } is supported)
+    all {
+      if (name.startsWith('org.eclipse')) {
+        group = 'org.eclipse'
+      }
+    }
   }
 
   uploadEclipse = [

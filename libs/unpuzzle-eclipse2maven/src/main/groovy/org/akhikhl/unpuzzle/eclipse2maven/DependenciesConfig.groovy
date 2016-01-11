@@ -1,5 +1,7 @@
 package org.akhikhl.unpuzzle.eclipse2maven
 
+import org.akhikhl.unpuzzle.osgi2maven.Pom
+
 /**
  * Configuration object for everything related to individual
  * dependencies and dependencies in general.
@@ -35,6 +37,17 @@ class DependenciesConfig {
       }
     }
     
+    /**
+     * Artifact configuration for this bundle.
+     * 
+     * @param cl the configuration closure
+     */
+    def artifact(Closure cl) {
+      if (cl != null) {
+        bundleArtifactConfigs[bundle] = cl
+      }
+    }
+    
   }
   
   // configuration properties
@@ -44,6 +57,12 @@ class DependenciesConfig {
   
   /** Map of bundles to replace */
   protected final Map<String, String> bundleReplacements = [:]
+  
+  /** Map of bundles to artifact configuration closures */
+  protected final Map<String, Closure> bundleArtifactConfigs = [:]
+  
+  /** Artifact configuration closure to apply for all bundles */
+  protected Closure allBundlesArtifactConfig
   
   // main call
   
@@ -76,6 +95,15 @@ class DependenciesConfig {
     new BundleConfig(bundle).call(config)
   }
   
+  /**
+   * Configure all bundle artifacts.
+   * 
+   * @param cl the artifact configuration closure
+   */
+  def all(Closure cl) {
+    allBundlesArtifactConfig = cl
+  }
+  
   // configuration accessors
 
   /**
@@ -97,6 +125,38 @@ class DependenciesConfig {
    */
   String getReplacement(String bundle) {
     return bundleReplacements[bundle]
+  }
+  
+  /**
+   * Get the artifact configuration for a given bundle.
+   * 
+   * @param pom the bundle Pom
+   * @param file the bundle file
+   */
+  ArtifactConfig getArtifactConfig(Pom pom, File file) {
+    ArtifactConfig conf = new ArtifactConfig(pom, file)
+    
+    String bundleName = pom.artifact
+    
+    // apply general configuration if present
+    if (allBundlesArtifactConfig != null) {
+      conf.call(allBundlesArtifactConfig)
+    }
+    
+    // apply bundle specific configuration
+    Closure specificConfig = bundleArtifactConfigs[bundleName]
+    if (specificConfig != null) {
+      conf.call(specificConfig)
+    }
+    
+    conf
+  }
+  
+  /**
+   * @return if there are any potential artifact modification configurations
+   */
+  boolean hasArtifactConfigs() {
+    allBundlesArtifactConfig != null || !bundleArtifactConfigs.isEmpty()
   }
   
 }
