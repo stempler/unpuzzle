@@ -124,7 +124,7 @@ final class EclipseDeployer {
           return
         }
         
-        def source_match = pom.artifact =~ /(.*)\.source/
+        def source_match = pom.artifact =~ /(.*)\.source$/
         if(source_match) {
           def artifact = source_match[0][1]
           if (!depConfig.isExcluded(artifact)) {
@@ -171,7 +171,7 @@ final class EclipseDeployer {
     def processFile = { File file ->
       Bundle2Pom reader = new Bundle2Pom(group: eclipseGroup, dependencyGroup: eclipseGroup)
       Pom pom = reader.convert(file)
-      def source_match = pom.artifact =~ /(.*)\.source/
+      def source_match = pom.artifact =~ /(.*)\.source$/
       if(!source_match && !depConfig.isExcluded(pom.artifact)) {
         index.addBundle(pom, file)
       }
