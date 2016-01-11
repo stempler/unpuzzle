@@ -494,7 +494,11 @@ installGroupPath=$installGroupPath"""
 
     def deleteArtifactDir = { Pom pom ->
       def group = pom.group ?: eclipseGroup
-      File artifactDir = new File(repositoryDir, "${group}/${pom.artifact}")
+      
+      // groups with dots are represented in nested directories
+      def groupDir = group.replaceAll(/\./, '/')
+      
+      File artifactDir = new File(repositoryDir, "${groupDir}/${pom.artifact}")
       if(artifactDir.exists())
         artifactDir.deleteDir()
     }
