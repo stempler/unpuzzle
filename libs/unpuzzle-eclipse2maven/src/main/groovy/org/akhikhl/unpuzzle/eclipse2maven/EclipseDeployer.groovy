@@ -36,6 +36,8 @@ final class EclipseDeployer {
   private final File targetDir
   private final String eclipseGroup
   private final Deployer mavenDeployer
+  private final DependenciesConfig depConfig
+  private final Closure verifyDependency
   private final IConsole console
   private final String installGroupPath
   private final String installGroupChecksum
@@ -44,10 +46,15 @@ final class EclipseDeployer {
   private Map artifactFiles = [:]
   private Map sourceFiles = [:]
 
-  EclipseDeployer(File targetDir, String eclipseGroup, Deployer mavenDeployer, IConsole console = null) {
+  EclipseDeployer(File targetDir, String eclipseGroup, Deployer mavenDeployer,
+    IConsole console = null, DependenciesConfig depConfig = new DependenciesConfig(),
+    Closure verifyDependency = null) {
+    
     this.targetDir = targetDir
     this.eclipseGroup = eclipseGroup
     this.mavenDeployer = mavenDeployer
+    this.depConfig = depConfig
+    this.verifyDependency = verifyDependency
     this.console = console ?: new SysConsole()
     installGroupPath = mavenDeployer.repositoryUrl.toString() + '/' + (eclipseGroup ? eclipseGroup.replace('.', '/') : '')
     installGroupChecksum = DigestUtils.md5Hex(installGroupPath)
@@ -113,21 +120,35 @@ final class EclipseDeployer {
       try {
         Bundle2Pom reader = new Bundle2Pom(group: eclipseGroup, dependencyGroup: eclipseGroup)
         Pom pom = reader.convert(file)
-        def source_match = pom.artifact =~ /(.*)\.source/
+        if (depConfig.isExcluded(pom.artifact)) {
+          return
+        }
+        
+        def source_match = pom.artifact =~ /(.*)\.source$/
         if(source_match) {
           def artifact = source_match[0][1]
-          sourceFiles["${artifact}:${pom.version}"] = file
+          if (!depConfig.isExcluded(artifact)) {
+            sourceFiles["${artifact}:${pom.version}"] = file
+          }
         } else if(!source.sourcesOnly) {
           def nl_match = pom.artifact =~ /(.*)\.nl_(.*)/
+          boolean excluded = false
           if(nl_match) {
             def artifact = nl_match[0][1]
             def language = nl_match[0][2]
-            if(!artifactsNl[language])
-              artifactsNl[language] = [:]
-            artifactsNl[language][artifact] = pom
+            if (!depConfig.isExcluded(artifact)) {
+              if(!artifactsNl[language]) {
+                artifactsNl[language] = [:]
+              }
+              artifactsNl[language][artifact] = pom
+            }
+            else {
+              return
+            }
           } else if(!source.languagePacksOnly) {
-            if(!artifacts.containsKey(pom.artifact))
+            if(!artifacts.containsKey(pom.artifact)) {
               artifacts[pom.artifact] = []
+            }
             artifacts[pom.artifact].add pom
           }
           artifactFiles["${pom.artifact}:${pom.version}"] = file
@@ -145,6 +166,41 @@ final class EclipseDeployer {
       console.endProgress()
     }
   }
+  
+  private void addToPackageIndex(EclipseSource source, artifactsSourceDir, PackageIndex index) {
+    def processFile = { File file ->
+      Bundle2Pom reader = new Bundle2Pom(group: eclipseGroup, dependencyGroup: eclipseGroup)
+      Pom pom = reader.convert(file)
+      def source_match = pom.artifact =~ /(.*)\.source$/
+      if(!source_match && !depConfig.isExcluded(pom.artifact)) {
+        index.addBundle(pom, file)
+      }
+    }
+    if (!source.sourcesOnly) { // sources with only sources can be skipped
+      console.startProgress("Building index of exported packages for bundles in $artifactsSourceDir")
+      try {
+        artifactsSourceDir.eachDir processFile
+        artifactsSourceDir.eachFileMatch ~/.*\.jar/, processFile
+      } finally {
+        console.endProgress()
+      }
+    }
+  }
+  
+  private void addPackageDependencies(PackageIndex index) {
+    // add dependencies based on package imports
+    console.startProgress("Determining package-based dependencies based on package imports")
+    try {
+      artifacts.each { name, artifactVersions ->
+        artifactVersions.each { pom ->
+          File bundleFile = artifactFiles["${pom.artifact}:${pom.version}"]
+          index.extendDependencies(pom, bundleFile)
+        }
+      }
+    } finally {
+      console.endProgress()
+    }
+  }
 
   void deploy(List<EclipseSource> sources) {
 
@@ -153,6 +209,8 @@ final class EclipseDeployer {
     installedCheckumsInfoFile.text = """eclipseGroup=$eclipseGroup
 installGroupPath=$installGroupPath"""
 
+    PackageIndex index = new PackageIndex(console: console)
+    
     for(EclipseSource source in sources) {
       String url = source.url
       String fileName = url.substring(url.lastIndexOf('/') + 1)
@@ -169,25 +227,50 @@ installGroupPath=$installGroupPath"""
           installedChecksum = installedChecksumFile.text
         packageInstalled = downloadedChecksum == installedChecksum
       }
-      if(!packageInstalled) {
-        File pluginFolder = new File(unpackDir, 'Contents/Eclipse/plugins')
+      File pluginFolder = new File(unpackDir, 'Contents/Eclipse/plugins')
+      if (!pluginFolder.exists()) {
+        pluginFolder = new File(unpackDir, 'plugins')
         if (!pluginFolder.exists()) {
-          pluginFolder = new File(unpackDir, 'plugins')
-          if (!pluginFolder.exists()) {
-            pluginFolder = unpackDir
-          }
+          pluginFolder = unpackDir
         }
+      }
+      if(!packageInstalled) {
         collectArtifactsInFolder(source, pluginFolder)
       }
+      // all bundles are added to the package index
+      addToPackageIndex(source, pluginFolder, index)
     }
 
-    fixDependencies()
+    // augment pom's with dependencies based on package imports
+    addPackageDependencies(index)
 
+    // write package dependencies report files
+    index.writeReports(targetDir)
+    
+    // load artifact modifications from configuration
+    ArtifactModManager mods
+    if (depConfig.hasArtifactConfigs()) {
+      mods = loadArtifactModifications()
+    }
+    
+    // fix dependency versions, apply artifact modifications
+    fixDependencies(mods)
+    
+    // apply artifact modifications to Poms, dependencies and files
+    if (mods) {
+      applyArtifactModifications(mods)
+    }
+
+    // deployment
     console.startProgress('Deploying artifacts')
     try {
       artifacts.each { name, artifactVersions ->
         artifactVersions.each { pom ->
-          mavenDeployer.deployBundle pom, artifactFiles["${pom.artifact}:${pom.version}"], sourceFile: sourceFiles["${pom.artifact}:${pom.version}"]
+          def artifactFile = artifactFiles["${pom.artifact}:${pom.version}"]
+          // artifact file reference may have been removed (because artifact should not be deployed)
+          if (artifactFile) {
+            mavenDeployer.deployBundle pom, artifactFile, sourceFile: sourceFiles["${pom.artifact}:${pom.version}"]
+          }
         }
       }
       artifactsNl.each { language, map_nl ->
@@ -209,24 +292,160 @@ installGroupPath=$installGroupPath"""
         installedChecksumFile.text = downloadedChecksumFile.text
       }
   }
+  
+  private ArtifactModManager loadArtifactModifications() {
+    ArtifactModManager mods = new ArtifactModManager(depConfig)
+    
+    // load the configuration for all existing artifacts
+    artifacts.each { name, artifactVersions ->
+      artifactVersions.each { Pom pom ->
+        def file = artifactFiles["${pom.artifact}:${pom.version}"]
+        
+        mods.loadArtifactConfig(pom, file)
+      }
+    }
+    
+    return mods
+  }
+  
+  private applyArtifactModifications(ArtifactModManager mods, boolean skipVerify = false) {
+    def verifyDependencies = new HashSet<String>()
+    
+    console.startProgress('Applying artifact modifications')
+    try {
+      artifacts.each { name, artifactVersions ->
+        artifactVersions.each { Pom pom ->
+          
+          String fileIdent = "${pom.artifact}:${pom.version}"
+          def artifactFile = artifactFiles.remove(fileIdent)
+          def sourceFile = sourceFiles.remove(fileIdent)
+          
+          // adapt Pom
+          ArtifactConfig pomConfig = mods.getConfig(pom, artifactFile)
+          pomConfig.apply(pom)
+          
+          // update files for deployment
+          if (pomConfig.deploy) {
+            // re-add files
+            fileIdent = "${pom.artifact}:${pom.version}"
+            artifactFiles[fileIdent] = artifactFile
+            if (sourceFile) {
+              sourceFiles[fileIdent] = sourceFile
+            }
+          }
+          else {
+            // should not be deployed
+            // collect for verification
+            verifyDependencies << "$pom.group:$pom.artifact:$pom.version" as String
+          }
+          
+          // update all dependencies
+          pom.dependencyBundles.each { DependencyBundle depBundle ->
+            ArtifactConfig depConfig = mods.getConfig(depBundle)
+            depConfig.apply(depBundle)
+            if (!depConfig.deploy) {
+              // collect for verification
+              verifyDependencies << "$depBundle.group:$depBundle.name:$depBundle.version" as String
+            }
+          }
+        }
+      }
+      
+      //TODO handle artifactsNl as well?
+    } finally {
+      console.endProgress()
+    }
+    
+    // verify dependencies that are not deployed but should reference
+    // an artifact that is available already
+    if (!skipVerify && depConfig.verifyIfNoDeploy) {
+      console.startProgress('Verifying artifacts that are not deployed')
+      try {
+        console.info(verifyDependencies.size() + ' artifacts to verify...')
+        if (verifyDependency == null) {
+          throw new IllegalStateException('Handler for verifying artifact not available')
+        }
+        
+        verifyDependencies.each { dep ->
+          boolean valid = verifyDependency(dep)
+          if (!valid) {
+            throw new IllegalStateException("Validation failed: Could not resolve dependency $dep")
+          }
+        }  
+      }
+      finally {
+        console.endProgress()
+      }
+    }
+  }
 
-  private void fixDependencies() {
+  private void fixDependencies(ArtifactModManager mods = null) {
     console.startProgress('Fixing dependencies')
     try {
       artifacts.each { name, artifactVersions ->
         console.info("Fixing dependencies: $name")
-        artifactVersions.each { pom ->
+        artifactVersions.each { Pom pom ->
+          
+          // collect dependency names
+          Set<String> dependencyNames = new HashSet<String>()
+          pom.dependencyBundles.each { DependencyBundle reqBundle ->
+            dependencyNames << reqBundle.name.trim()
+          }
+          
+          // apply replacements
+          pom.dependencyBundles.removeAll { DependencyBundle reqBundle ->
+            def replacement
+            if (reqBundle.group == null || reqBundle.group == eclipseGroup) {
+              replacement = depConfig.getReplacement(reqBundle.name.trim())
+            }
+            if (replacement) {
+              if (!dependencyNames.contains(replacement)) {
+                // replace only if not yet a dependency
+                
+                // replace bundle name
+                reqBundle.name = replacement
+                
+                return false
+              }
+              else {
+                // remove dependency - replacement is already a dependency
+                return true
+              }
+            } else {
+              // keep dependency as-is
+              return false
+            }
+          }
+          
+          // remove all dependencies that cannot be found (for any version)
           pom.dependencyBundles.removeAll { reqBundle ->
             if(!artifacts[reqBundle.name.trim()]) {
-              console.info("Warning: artifact dependency $pom.group:$pom.artifact:$pom.version -> $reqBundle.name could not be resolved.")
-              return true
+              def config = mods?.getConfig(reqBundle)
+              if (config == null || config.deploy) {
+                // artifact should be deployed but is not present
+                console.info("Warning: artifact dependency $pom.group:$pom.artifact:$pom.version -> $reqBundle.name could not be resolved.")
+                return true
+              }
+              else {
+                // artifact is assumed to be available elsewhere
+                return false
+              }
             }
             return false
           }
+          
+          // fix version of dependencies based on available artifacts
           pom.dependencyBundles.each { reqBundle ->
             def resolvedVersions = artifacts[reqBundle.name.trim()]
-            if(resolvedVersions.size() == 1)
+            if (!resolvedVersions || resolvedVersions.isEmpty()) {
+              /*
+               * Ignore - missing dependency that is not deployed (otherwise it
+               * would have been removed in the previous step). 
+               */
+            }
+            else if (resolvedVersions.size() == 1) {
               reqBundle.version = resolvedVersions[0].version
+            }
             else if(!resolvedVersions.find { it -> it.version == reqBundle.version.trim() }) {
               def compare = { a, b -> new Version(a).compare(new Version(b)) }
               resolvedVersions = resolvedVersions.sort(compare)
@@ -295,10 +514,27 @@ installGroupPath=$installGroupPath"""
       }
     }
 
-    fixDependencies()
+    // load artifact modifications from configuration
+    ArtifactModManager mods
+    if (depConfig.hasArtifactConfigs()) {
+      mods = loadArtifactModifications()
+    }
+    
+    // fix dependency versions, apply artifact modifications
+    fixDependencies(mods)
+    
+    // apply artifact modifications to Poms, dependencies and files
+    if (mods) {
+      applyArtifactModifications(mods, true)
+    }
 
-    def deleteArtifactDir = { pom ->
-      File artifactDir = new File(repositoryDir, "${eclipseGroup}/${pom.artifact}")
+    def deleteArtifactDir = { Pom pom ->
+      def group = pom.group ?: eclipseGroup
+      
+      // groups with dots are represented in nested directories
+      def groupDir = group.replaceAll(/\./, '/')
+      
+      File artifactDir = new File(repositoryDir, "${groupDir}/${pom.artifact}")
       if(artifactDir.exists())
         artifactDir.deleteDir()
     }

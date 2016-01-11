@@ -6,4 +6,5 @@ dependencies {
   compile project(':libs:unpuzzle-utils')
   compile 'commons-codec:commons-codec:1.9'
   compile "ch.qos.logback:logback-classic:$logback_version"
+  compile 'biz.aQute.bnd:bndlib:2.4.0'
 }

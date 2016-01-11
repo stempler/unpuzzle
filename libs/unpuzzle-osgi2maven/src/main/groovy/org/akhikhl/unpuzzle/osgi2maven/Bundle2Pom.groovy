@@ -65,7 +65,11 @@ final class Bundle2Pom {
     List elements = string.split(';')
     String name = elements[0]
     elements.remove(0)
-    DependencyBundle bundle = new DependencyBundle(name: name, resolution: Constants.RESOLUTION_MANDATORY, visibility: Constants.VISIBILITY_PRIVATE, version: "[1.0,)")
+    DependencyBundle bundle = new DependencyBundle(
+      name: name, 
+      resolution: Constants.RESOLUTION_MANDATORY, 
+      visibility: Constants.VISIBILITY_PRIVATE, 
+      version: "0.0.0")
     for(String element in elements)
       if (element.startsWith(Constants.BUNDLE_VERSION_ATTRIBUTE)) {
         String s = element.substring(element.indexOf('=') + 1)

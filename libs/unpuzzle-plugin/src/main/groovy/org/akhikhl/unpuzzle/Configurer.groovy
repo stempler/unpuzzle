@@ -16,6 +16,8 @@ import org.akhikhl.unpuzzle.eclipse2maven.EclipseDeployer
 import org.akhikhl.unpuzzle.eclipse2maven.EclipseSource
 import org.akhikhl.unpuzzle.osgi2maven.Deployer
 import org.gradle.api.Project
+import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.Dependency
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -108,6 +110,19 @@ class Configurer {
       updateTaskProperties()
     } // project.afterEvaluate
   }
+  
+  /**
+   * Verify if a dependency can be resolved via the project's repositories.
+   * 
+   * @param dependencyNotation the dependency notation as recognized by Gradle
+   * @return <code>true</code> if the dependency can be resolved, <code>false</code> otherwise
+   */
+  boolean verifyDependency(def dependencyNotation) {
+    Dependency dep = project.dependencies.create(dependencyNotation)
+    Configuration configuration = project.configurations.detachedConfiguration(dep)
+    Set<File> artifacts = configuration.resolve()
+    return !artifacts.isEmpty()
+  }
 
   void downloadEclipse() {
     def vconf = getSelectedVersionConfig()
@@ -144,7 +159,9 @@ class Configurer {
       return
     }
     def mavenDeployer = new Deployer(effectiveConfig.localMavenRepositoryDir, tempDir: getTempDir())
-    def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup, mavenDeployer)
+    def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir,
+      vconf.eclipseMavenGroup, mavenDeployer, null, effectiveConfig.dependenciesConfig,
+      this.&verifyDependency)
     if(!eclipseDeployer.allDownloadedPackagesAreInstalled(vconf.sources)) {
       downloadEclipse()
       log.warn 'Installing eclipse version {} to maven-repo {}, maven-group {}', effectiveConfig.selectedEclipseVersion, effectiveConfig.localMavenRepositoryDir.toURI().toString(), vconf.eclipseMavenGroup
@@ -157,7 +174,9 @@ class Configurer {
     if(effectiveConfig.dryRun)
       return false
     def mavenDeployer = new Deployer(effectiveConfig.localMavenRepositoryDir, tempDir: getTempDir())
-    new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup, mavenDeployer).allDownloadedPackagesAreInstalled(vconf.sources)
+    new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup,
+      mavenDeployer, null, effectiveConfig.dependenciesConfig, this.&verifyDependency)
+        .allDownloadedPackagesAreInstalled(vconf.sources)
   }
 
   private void setupConfigChain(Project project) {
@@ -188,7 +207,8 @@ class Configurer {
     }
     def mavenDeployer = new Deployer(effectiveConfig.localMavenRepositoryDir, tempDir: getTempDir())
     effectiveConfig.versionConfigs.each { eclipseVersion, vconf ->
-      def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup, mavenDeployer)
+      def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup,
+        mavenDeployer, null, effectiveConfig.dependenciesConfig, this.&verifyDependency)
       if(!eclipseDeployer.allDownloadedPackagesAreUninstalled(vconf.sources)) {
         log.warn 'Uninstalling eclipse version {} from maven-repo {}, maven-group {}', eclipseVersion, effectiveConfig.localMavenRepositoryDir.toURI().toString(), vconf.eclipseMavenGroup
         eclipseDeployer.uninstall(vconf.sources)
@@ -201,7 +221,8 @@ class Configurer {
       return false
     def mavenDeployer = new Deployer(effectiveConfig.localMavenRepositoryDir, tempDir: getTempDir())
     def result = !effectiveConfig.versionConfigs.find { eclipseVersion, vconf ->
-      def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup, mavenDeployer)
+      def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup,
+        mavenDeployer, null, effectiveConfig.dependenciesConfig, this.&verifyDependency)
       def uninstalled = eclipseDeployer.allDownloadedPackagesAreUninstalled(vconf.sources)
       log.debug '{} uninstalled: {}', eclipseVersion, uninstalled
       return !uninstalled
@@ -217,7 +238,8 @@ class Configurer {
       return
     }
     def mavenDeployer = new Deployer(effectiveConfig.localMavenRepositoryDir, tempDir: getTempDir())
-    def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup, mavenDeployer)
+    def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup,
+      mavenDeployer, null, effectiveConfig.dependenciesConfig, this.&verifyDependency)
     if(!eclipseDeployer.allDownloadedPackagesAreUninstalled(vconf.sources)) {
       log.warn 'Uninstalling eclipse version {} from maven-repo {}, maven-group {}', effectiveConfig.selectedEclipseVersion, effectiveConfig.localMavenRepositoryDir.toURI().toString(), vconf.eclipseMavenGroup
       eclipseDeployer.uninstall(vconf.sources)
@@ -229,7 +251,8 @@ class Configurer {
     if(effectiveConfig.dryRun)
       return false
     def mavenDeployer = new Deployer(effectiveConfig.localMavenRepositoryDir, tempDir: getTempDir())
-    def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup, mavenDeployer)
+    def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup,
+      mavenDeployer, null, effectiveConfig.dependenciesConfig, this.&verifyDependency)
     eclipseDeployer.allDownloadedPackagesAreUninstalled(vconf.sources)
   }
 
@@ -289,7 +312,8 @@ class Configurer {
     }
     log.warn 'Deploying eclipse version {} to maven-repo {}, maven-group {}', effectiveConfig.selectedEclipseVersion, uploadEclipse.url, vconf.eclipseMavenGroup
     Deployer mavenDeployer = new Deployer(uploadEclipse.url, tempDir: getTempDir(), user: uploadEclipse.user, password: uploadEclipse.password)
-    def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup, mavenDeployer)
+    def eclipseDeployer = new EclipseDeployer(effectiveConfig.unpuzzleDir, vconf.eclipseMavenGroup,
+      mavenDeployer, null, effectiveConfig.dependenciesConfig, this.&verifyDependency)
     eclipseDeployer.deploy(vconf.sources)
   }
 }

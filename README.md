@@ -39,6 +39,9 @@ When OSGi-bundle is being "mavenized", the following happens:
 
 - The program compares every required-bundle of the given OSGi-bundle against 
   other mavenized OSGi-bundles and, when match found, converts it to maven dependency.
+
+- The program analyzes exported and imported packages of OSGi bundles to create
+  maven dependencies for OSGi Import-Package instructions
   
 - The program automatically finds language-fragments of the given OSGi-bundle 
   and adds them as optional maven dependencies.
@@ -121,6 +124,18 @@ uploadEclipse task depends on [downloadEclipse](#downloadeclipse] task.
 
 **purgeEclipse** task cleans everything specific to Unpuzzle plugin. Particularly, it uninstalls installed maven artifacts and deletes directory $HOME/.unpuzzle.
 
+## Package based dependencies
+
+Dependencies for mavenized OSGi bundles are determine based on `Require-Bundle` and `Import-Package` instructions in the bundle manifests.
+To resolve package based dependencies an index is built over all the exported packages of the bundles available. This information is then used to find, for each `Import-Package` instruction, the bundles that provide the needed package.
+
+That means that package based dependencies can only be found in the locally downloaded bundles that are part of the configured eclipse sources. Thus there may be package dependencies that cannot be satisfied. To get an overview on which packages were not found and to identify possible problems related to that, reports files are generated in the unpuzzle directory when running *installEclipse* or *uploadEclipse*:
+
+* `unsatisfiedPackages-mandatory.json` - Lists all packages that were a *mandatory* dependency but could not be found, for each package information is included which bundles have the dependency and which version of the package they import (Note: often this may be packages that are available in a standard JRE and can be ignored)
+* `unsatisfiedPackages-optional.json` - Lists all packages that were a *optional* dependency but could not be found, for each package information is included which bundles have the dependency and which version of the package they import
+
+There may be multiple bundles that provide a package. All of the bundles that provide the imported package will be added as a dependency. Depending on the situation this may be desired or not. If for some reason you have different bundles representing the same library you may only want to use one of them, if you have different bundles that add different classes to a package you will probably want to include them all. There is an additional report file generated (`packageExportOverlaps.json`) that lists all packages that are supplied by different dependencies for you to analyse and possibly adapt the configuration if you identify any issues.
+
 ## Configuration DSL
 
 Unpuzzle works without configuration out of the box. You just apply gradle plugin,
@@ -162,11 +177,47 @@ unpuzzle {
     }
   }
 
+  artifacts {
+    // a bundle can be excluded completely
+    exclude('bundleToExclude')
+
+    // or replaced by a different bundle,
+    // e.g. if you have two differently named bundles with the same library
+    bundle('slf4j.api') {
+      replaceWith 'org.slf4j.api'
+    }
+
+    // artifacts can be adapted, for instance change artifact group, name or version
+    // or prevent deployment because an existing Maven artifact should be used (e.g. from Maven Central)
+    bundle('org.slf4j.api') {
+      artifact {
+        group = 'org.slf4j'
+        name = 'slf4j-api'
+        // version = stripQualifier(version)
+        deploy = false
+      }
+    }
+
+    // for artifacts that are not deployed (like the above example)
+    // you can enable that they should be verified by trying to resolve
+    // them through the Maven repositories configured in the project
+    // (disabled by default)
+    verifyIfNoDeploy = false
+
+    // artifacts can also be adapted in a more general manner with a configuration
+    // that is applied to all bundles (currently only one use of all { ... } is supported)
+    all {
+      if (name.startsWith('org.eclipse')) {
+        group = 'org.eclipse'
+      }
+    }
+  }
+
   uploadEclipse = [
     url: 'http://example.com/repository',
     user: 'someUser',
     password: 'somePassword'
-  ]  
+  ]
 }
 ```
 
