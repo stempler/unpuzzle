@@ -9,6 +9,8 @@ package org.akhikhl.unpuzzle.osgi2maven
 
 import groovy.xml.MarkupBuilder
 
+import java.util.jar.Manifest;
+
 import org.osgi.framework.Constants
 
 /**
@@ -25,6 +27,8 @@ final class Pom {
 	String packaging = 'jar'
 	List<DependencyBundle> dependencyBundles = []
   String dependencyGroup
+  
+  Manifest manifest
 
 	String toString() {
     ByteArrayOutputStream stm = new ByteArrayOutputStream()
