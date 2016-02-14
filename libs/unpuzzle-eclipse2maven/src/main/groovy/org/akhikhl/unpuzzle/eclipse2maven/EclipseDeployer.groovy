@@ -36,6 +36,7 @@ final class EclipseDeployer {
   private final File targetDir
   private final String eclipseGroup
   private final Deployer mavenDeployer
+  private final Deployer snapshotDeployer
   private final DependenciesConfig depConfig
   private final Closure verifyDependency
   private final IConsole console
@@ -46,13 +47,14 @@ final class EclipseDeployer {
   private Map artifactFiles = [:]
   private Map sourceFiles = [:]
 
-  EclipseDeployer(File targetDir, String eclipseGroup, Deployer mavenDeployer,
+  EclipseDeployer(File targetDir, String eclipseGroup, Deployer mavenDeployer, Deployer snapshotDeployer = null,
     IConsole console = null, DependenciesConfig depConfig = new DependenciesConfig(),
     Closure verifyDependency = null) {
     
     this.targetDir = targetDir
     this.eclipseGroup = eclipseGroup
     this.mavenDeployer = mavenDeployer
+    this.snapshotDeployer = snapshotDeployer ? snapshotDeployer : mavenDeployer
     this.depConfig = depConfig
     this.verifyDependency = verifyDependency
     this.console = console ?: new SysConsole()
@@ -269,20 +271,22 @@ installGroupPath=$installGroupPath"""
           def artifactFile = artifactFiles["${pom.artifact}:${pom.version}"]
           // artifact file reference may have been removed (because artifact should not be deployed)
           if (artifactFile) {
-            mavenDeployer.deployBundle pom, artifactFile, sourceFile: sourceFiles["${pom.artifact}:${pom.version}"]
+            def deployer = pom.version?.endsWith('-SNAPSHOT') ? snapshotDeployer : mavenDeployer
+            deployer.deployBundle pom, artifactFile, sourceFile: sourceFiles["${pom.artifact}:${pom.version}"]
           }
         }
       }
       artifactsNl.each { language, map_nl ->
         map_nl.each { artifactName, pom ->
-          mavenDeployer.deployBundle pom, artifactFiles["${pom.artifact}:${pom.version}"]
+          def deployer = pom.version?.endsWith('-SNAPSHOT') ? snapshotDeployer : mavenDeployer
+          deployer.deployBundle pom, artifactFiles["${pom.artifact}:${pom.version}"]
         }
       }
     } finally {
       console.endProgress()
     }
 
-    if(mavenDeployer.repositoryUrl.protocol == 'file')
+    if(mavenDeployer.repositoryUrl.protocol == 'file') {
       for(EclipseSource source in sources) {
         String url = source.url
         String fileName = url.substring(url.lastIndexOf('/') + 1)
@@ -291,6 +295,7 @@ installGroupPath=$installGroupPath"""
         installedChecksumFile.parentFile.mkdirs()
         installedChecksumFile.text = downloadedChecksumFile.text
       }
+    }
   }
   
   private ArtifactModManager loadArtifactModifications() {

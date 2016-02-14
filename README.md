@@ -215,6 +215,7 @@ unpuzzle {
 
   uploadEclipse = [
     url: 'http://example.com/repository',
+    snapshotUrl: 'http://example.com/snapshots',
     user: 'someUser',
     password: 'somePassword'
   ]
