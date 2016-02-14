@@ -68,7 +68,7 @@ class PackageIndex {
    * @param dirOrJar directory or JAR file representing an OSGi bundle
    */
   void addBundle(Pom pom, File dirOrJar) {
-    Manifest manifest = loadManifest(dirOrJar)
+    Manifest manifest = pom.manifest
 
     // determine package exports
     String exports = manifest.mainAttributes.getValue(Constants.EXPORT_PACKAGE)
@@ -78,25 +78,6 @@ class PackageIndex {
       def pkgVersion = attrs[Constants.VERSION_ATTRIBUTE]
       putPackage(pkg, new OSGiVersion(pkgVersion ?: '0.0.0'), pom)
     }
-  }
-
-  /**
-   * Load manifest information from a bundle.
-   * 
-   * @param dirOrJar the directory or Jar file representing the bundle
-   * @return the loaded manifest
-   */
-  private Manifest loadManifest(File dirOrJar) {
-    Manifest manifest
-    if (dirOrJar.isDirectory()) {
-      new File(dirOrJar, 'META-INF/MANIFEST.MF').withInputStream {
-        manifest = new Manifest(it)
-      }
-    } else {
-      manifest = new JarFile(dirOrJar).manifest
-    }
-
-    manifest
   }
 
   /**
@@ -124,7 +105,7 @@ class PackageIndex {
    * @param dirOrJar directory or JAR file representing an OSGi bundle
    */
   void extendDependencies(Pom pom, File dirOrJar) {
-    Manifest manifest = loadManifest(dirOrJar)
+    Manifest manifest = pom.manifest
 
     // determine package imports
     String imports = manifest.mainAttributes.getValue(Constants.IMPORT_PACKAGE)

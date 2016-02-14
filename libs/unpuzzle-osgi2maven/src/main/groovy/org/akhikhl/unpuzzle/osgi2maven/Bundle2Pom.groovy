@@ -38,25 +38,25 @@ final class Bundle2Pom {
    */
   Pom convert(File bundleFileOrDirectory) {
     def pom = new Pom()
-    def manifest
     if (bundleFileOrDirectory.isDirectory()) {
       new File(bundleFileOrDirectory, 'META-INF/MANIFEST.MF').withInputStream {
-        manifest = new Manifest(it)
+        pom.manifest = new Manifest(it)
       }
       pom.packaging = 'dir'
-    } else
-      manifest = new JarFile(bundleFileOrDirectory).manifest
+    } else {
+      pom.manifest = new JarFile(bundleFileOrDirectory).manifest
+    }
 
-    pom.artifact = manifest.attr.getValue(Constants.BUNDLE_SYMBOLICNAME)
+    pom.artifact = pom.manifest.attr.getValue(Constants.BUNDLE_SYMBOLICNAME)
     if (pom.artifact.contains(';'))
       pom.artifact = pom.artifact.split(';')[0]
     pom.artifact = pom.artifact.trim()
 
     pom.group = group ?: pom.artifact
     pom.dependencyGroup = dependencyGroup
-    pom.version = manifest.attr.getValue(Constants.BUNDLE_VERSION)
+    pom.version = pom.manifest.attr.getValue(Constants.BUNDLE_VERSION)
 
-    parseDependencyBundles(pom.dependencyBundles, manifest.attr.getValue(Constants.REQUIRE_BUNDLE))
+    parseDependencyBundles(pom.dependencyBundles, pom.manifest.attr.getValue(Constants.REQUIRE_BUNDLE))
 
     return pom
   }
