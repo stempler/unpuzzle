@@ -8,7 +8,7 @@
 package org.akhikhl.unpuzzle.eclipse2maven
 
 import org.apache.commons.codec.digest.DigestUtils
-
+import org.osgi.framework.Constants;
 import org.akhikhl.unpuzzle.utils.IConsole
 import org.akhikhl.unpuzzle.utils.SysConsole
 import org.akhikhl.unpuzzle.osgi2maven.Pom
@@ -340,14 +340,40 @@ installGroupPath=$installGroupPath"""
           }
           
           // update all dependencies
+          
+          List<DependencyBundle> otherPartDependencies = []
+          
           pom.dependencyBundles.each { DependencyBundle depBundle ->
             ArtifactConfig depConfig = mods.getConfig(depBundle)
+            // apply configuration to dependency (so reference is correct)
             depConfig.apply(depBundle)
             if (!depConfig.deploy) {
               // collect for verification
               verifyDependencies << "$depBundle.group:$depBundle.name:$depBundle.version" as String
             }
+            
+            if (depConfig.otherParts) {
+              // collect additional dependencies to add
+              depConfig.otherParts.each { it ->
+                otherPartDependencies << new DependencyBundle(
+                  group: it.group,
+                  name: it.name,
+                  resolution: Constants.RESOLUTION_MANDATORY,
+                  visibility: Constants.VISIBILITY_PRIVATE,
+                  version: it.version)
+              }
+            }
           }
+          
+          otherPartDependencies.each { depBundle ->
+            //TODO check for duplicates / dependencies already present?
+            
+            // add as dependency
+            pom.dependencyBundles << depBundle
+            // collect for verification - "other parts" are never deployed
+            verifyDependencies << "$depBundle.group:$depBundle.name:$depBundle.version" as String
+          }
+          
         }
       }
       
