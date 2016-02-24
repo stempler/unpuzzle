@@ -1,3 +1,13 @@
+## About this fork
+
+This is a fork of the original unpuzzle project with a slightly different focus. This adapted version aims to provide the means to mavenize existing Eclipse RCP applications to be able to reuse the functionality in a standard Maven environment. It adds the following main features:
+
+* include dependencies based on Import-Package instructions in bundle manifests (see also this [Github issue](https://github.com/akhikhl/unpuzzle/issues/7))
+* translate bundle dependencies to existing Maven artifacts on jcenter and other repositories where possible
+
+The changes are probably to extensive for the original author to agree integrating it into the main project, thus I'm maintaining this adapted version of unpuzzle on Sonatype Nexus / Maven Central with an alternate group name (*org.standardout.unpuzzle*). Right now there is only a snapshot version available.
+
+
 ![Unpuzzle logo](media/logo.png "Unpuzzle logo")
 
 [![Build Status](https://travis-ci.org/akhikhl/unpuzzle.png?branch=master)](https://travis-ci.org/akhikhl/unpuzzle) 

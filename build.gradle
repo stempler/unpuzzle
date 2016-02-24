@@ -4,15 +4,9 @@ buildscript {
     jcenter()
   }
 
-  dependencies {
-    classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.2'
-    classpath 'org.jfrog.buildinfo:build-info-extractor-gradle:3.1.0'
-  }
 }
 
 apply plugin: 'base' // import clean task
-apply plugin: 'maven-publish'
-apply plugin: 'com.jfrog.artifactory'
 
 allprojects {
   apply plugin: 'eclipse'
@@ -27,7 +21,7 @@ ext {
 if( !hasProperty( 'bintrayUser' ) )
   ext.bintrayUser = ''
 
-if( !hasProperty( 'bintrayKey' ) )
+if( !hasProperty( 'bintrayApiKey' ) )
   ext.bintrayKey = ''
 
 task('build')
@@ -49,26 +43,3 @@ task('cleanExamples', type: GradleBuild) { task ->
 task('wrapper', type: Wrapper) {
   gradleVersion = '2.3'
 }
-
-artifactory {
-  contextUrl = 'https://oss.jfrog.org/artifactory'
-  publish {
-    repository {
-      if (project.version.endsWith('-SNAPSHOT'))
-        repoKey = 'oss-snapshot-local'
-      else
-        repoKey = 'oss-release-local'
-      username = project.bintrayUser
-      password = project.bintrayKey
-    }
-    defaults {
-      publications 'mavenJava'
-    }
-  }
-  resolve {
-    repository {
-      repoKey = 'repo'
-    }
-  }
-}
-

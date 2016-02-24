@@ -2,77 +2,78 @@
 // apply from: rootProject.file('libs/publish.gradle')
 
 apply plugin: 'maven'
-apply plugin: 'maven-publish'
-apply plugin: 'com.jfrog.artifactory'
-apply plugin: 'com.jfrog.bintray'
+apply plugin: 'signing'
 
-def thisProject = project
-
-def configurePom = {
-  resolveStrategy = Closure.DELEGATE_FIRST
-  name thisProject.name
-  packaging 'jar'
-  description thisProject.description
-  url thisProject.project_website
-
-  scm {
-    url thisProject.project_scm
-    connection thisProject.project_scm
-    developerConnection thisProject.project_scm
-  }
-
-  licenses {
-    license {
-      name thisProject.license
-      url thisProject.license_url
-      distribution 'repo'
-    }
-  }
-
-  developers {
-    developer {
-      id thisProject.developerId
-      name thisProject.developerName
-    }
-  }
+// define artifacts for upload
+artifacts {
+  archives jar
+  archives javadocJar
+  archives sourcesJar
 }
 
-publishing {
-  publications {
-    mavenJava(MavenPublication) {
-      from components.java
-      pom.withXml {
-        asNode().children().last() + configurePom
-      }
-    }
-  }
-}
-
-install.repositories.mavenInstaller.pom*.whenConfigured { pom ->
+def configurePom(def pom, def thisProject) {
+  // ensure correct artifact ID
+  pom.artifactId = thisProject.name
+  
+  // pom file details
   pom.project {
-    name thisProject.name
-    configurePom.rehydrate(delegate, owner, thisObject).call()
+     name thisProject.name
+     packaging 'jar'
+     description thisProject.description
+     url thisProject.project_website
+
+     scm {
+       url thisProject.project_scm
+       connection thisProject.project_scm
+       developerConnection thisProject.project_scm
+     }
+
+     licenses {
+       license {
+         name thisProject.license
+         url thisProject.license_url
+         distribution 'repo'
+       }
+     }
+
+     developers {
+       developer {
+         id thisProject.developerId
+         name thisProject.developerName
+         email thisProject.developerEmail
+       }
+     }
+   }
+}
+
+install {
+  repositories.mavenInstaller {
+    // ensure correct artifact ID when installing locally
+    configurePom(pom, project)
   }
 }
 
-artifactoryPublish {
-  dependsOn { project.tasks.generatePomFileForMavenJavaPublication }
-  publications 'mavenJava'
+// sign all artifacts
+signing {
+  required { gradle.taskGraph.hasTask(uploadArchives) }
+  sign configurations.archives
 }
 
-bintray {
-  user = project.bintrayUser
-  key = project.bintrayKey
-  configurations = ['archives']
-  pkg {
-    repo = 'maven'
-    name = thisProject.projectId
-    desc = thisProject.description
-    licenses = [ thisProject.license ]
-    labels = thisProject.projectLabels.split(',')
+uploadArchives {
+  repositories {
+    mavenDeployer {
+      // sign artifacts before upload
+      beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+      
+      // upload to sonatype OSS (snapshot/release)
+      repository(url: this.version.endsWith('-SNAPSHOT') ?
+          'https://oss.sonatype.org/content/repositories/snapshots' :
+          'https://oss.sonatype.org/service/local/staging/deploy/maven2') {
+        authentication(userName: this.hasProperty('sonatypeUsername') ? sonatypeUsername : '',
+          password: this.hasProperty('sonatypePassword') ? sonatypePassword : '')
+      }
+      
+      configurePom(pom, project)
+    }
   }
-  dryRun = false
 }
-
-bintrayUpload.dependsOn assemble
-bintrayUpload.finalizedBy parent.tasks.bintraySign
