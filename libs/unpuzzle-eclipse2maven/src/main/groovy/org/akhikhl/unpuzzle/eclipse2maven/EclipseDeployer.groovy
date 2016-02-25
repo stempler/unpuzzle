@@ -299,7 +299,7 @@ installGroupPath=$installGroupPath"""
   }
   
   private ArtifactModManager loadArtifactModifications() {
-    ArtifactModManager mods = new ArtifactModManager(depConfig)
+    ArtifactModManager mods = new ArtifactModManager(depConfig, eclipseGroup, console)
     
     // load the configuration for all existing artifacts
     artifacts.each { name, artifactVersions ->
