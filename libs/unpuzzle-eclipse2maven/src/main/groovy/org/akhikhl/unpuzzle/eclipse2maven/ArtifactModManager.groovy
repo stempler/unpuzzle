@@ -2,6 +2,7 @@ package org.akhikhl.unpuzzle.eclipse2maven
 
 import org.akhikhl.unpuzzle.osgi2maven.DependencyBundle;
 import org.akhikhl.unpuzzle.osgi2maven.Pom
+import org.akhikhl.unpuzzle.utils.IConsole
 
 class ArtifactModManager {
 
@@ -12,8 +13,14 @@ class ArtifactModManager {
    */
   private final Map storedConfigs = [:]
   
-  ArtifactModManager(DependenciesConfig depConfig) {
+  private final String defaultGroup
+  
+  private final IConsole console
+  
+  ArtifactModManager(DependenciesConfig depConfig, String defaultGroup, IConsole console) {
     this.depConfig = depConfig
+    this.defaultGroup = defaultGroup
+    this.console = console
   }
   
   /**
@@ -68,15 +75,19 @@ class ArtifactModManager {
    * @return the artifact configuration
    */
   ArtifactConfig getConfig(DependencyBundle dependency) {
-    ArtifactConfig result = getArtifactConfig(dependency.group, dependency.name, dependency.version)
+    def group = dependency.group ?: defaultGroup
+    
+    ArtifactConfig result = getArtifactConfig(group, dependency.name, dependency.version)
     if (result == null) {
       /*
        * Seems a missing dependency, but may still be OK if the dependency is
        * not to be deployed but can be found elsewhere.
        */
       
+      console.info('[warn] Creating artifact configuration for missing dependency: ' + [group: group, artifact: dependency.name, version: dependency.version])
+      
       // create dummy Pom
-      Pom pom = new Pom(group: dependency.group, artifact: dependency.name, version: dependency.version)
+      Pom pom = new Pom(group: group, artifact: dependency.name, version: dependency.version)
       
       // load artifact configuration without a file
       result = loadArtifactConfig(pom, null)
