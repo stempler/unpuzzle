@@ -9,6 +9,8 @@ package org.akhikhl.unpuzzle.eclipse2maven
 
 import org.apache.commons.codec.digest.DigestUtils
 import org.osgi.framework.Constants;
+import org.osgi.framework.VersionRange
+import org.osgi.framework.Version as OSGiVersion
 import org.akhikhl.unpuzzle.utils.IConsole
 import org.akhikhl.unpuzzle.utils.SysConsole
 import org.akhikhl.unpuzzle.osgi2maven.Pom
@@ -477,18 +479,40 @@ installGroupPath=$installGroupPath"""
             else if (resolvedVersions.size() == 1) {
               reqBundle.version = resolvedVersions[0].version
             }
-            else if(!resolvedVersions.find { it -> it.version == reqBundle.version.trim() }) {
-              def compare = { a, b -> new Version(a).compare(new Version(b)) }
-              resolvedVersions = resolvedVersions.sort(compare)
-              int i = Collections.binarySearch resolvedVersions, reqBundle.version.trim(), compare as java.util.Comparator
-              if(i < 0)
-                i = -i - 1
-              if(i > resolvedVersions.size() - 1)
-                i = resolvedVersions.size() - 1
-              def c = resolvedVersions[i]
-              def depsStr = resolvedVersions.collect({ p -> "$p.group:$p.artifact:$p.version" }).join(', ')
-              console.info("Warning: resolved ambiguous dependency: $pom.group:$pom.artifact:$pom.version -> $reqBundle.name:$reqBundle.version, chosen $c.group:$c.artifact:$c.version from [$depsStr].")
-              reqBundle.version = c.version
+            else {
+              // normalise dependency version (may be a range)
+              VersionRange versionRange = new VersionRange(reqBundle.version.trim() ?: '0.0.0')
+              String depVersion = versionRange.getLeft().toString()
+               
+              if (resolvedVersions.find { it -> it.version == depVersion }) {
+                // use normalised version, there is a direct match
+                reqBundle.version = depVersion
+              } else {
+                def compare = { a, b -> new Version(a).compare(new Version(b)) }
+                resolvedVersions = resolvedVersions.sort(compare)
+                
+                // find a version that is in the version range
+                def matchedDep = resolvedVersions.find { dep ->
+                  def osgiVersion = new OSGiVersion(dep.version)
+                  versionRange.includes(osgiVersion)
+                }
+                
+                if (!matchedDep) {
+                  // if no match, use original way of matching
+                  int i = Collections.binarySearch resolvedVersions, reqBundle.version.trim(), compare as java.util.Comparator
+                  if(i < 0) {
+                    i = -i - 1
+                  }
+                  if(i > resolvedVersions.size() - 1) {
+                    i = resolvedVersions.size() - 1
+                  }
+                  matchedDep = resolvedVersions[i]
+                }
+                
+                def depsStr = resolvedVersions.collect({ p -> "$p.group:$p.artifact:$p.version" }).join(', ')
+                console.info("Warning: resolved ambiguous dependency: $pom.group:$pom.artifact:$pom.version -> $reqBundle.name:$reqBundle.version, chosen $matchedDep.group:$matchedDep.artifact:$matchedDep.version from [$depsStr].")
+                reqBundle.version = matchedDep.version
+              }
             }
           }
           artifactsNl.each { language, map_nl ->
