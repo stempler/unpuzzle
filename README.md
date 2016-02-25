@@ -5,7 +5,26 @@ This is a fork of the original unpuzzle project with a slightly different focus.
 * include dependencies based on Import-Package instructions in bundle manifests (see also this [Github issue](https://github.com/akhikhl/unpuzzle/issues/7))
 * translate bundle dependencies to existing Maven artifacts on jcenter and other repositories where possible
 
-The changes are probably to extensive for the original author to agree integrating it into the main project, thus I'm maintaining this adapted version of unpuzzle on Sonatype Nexus / Maven Central with an alternate group name (*org.standardout.unpuzzle*). Right now there is only a snapshot version available.
+The changes are probably(?) to extensive for the original author to agree integrating it into the main project, thus I'm maintaining this adapted version of unpuzzle on Sonatype Nexus / Maven Central with an alternate group name (*org.standardout.unpuzzle*). Right now there is only a snapshot version available:
+
+```groovy
+buildscript {
+  repositories {
+    jcenter()
+    maven {
+      url 'http://oss.sonatype.org/content/repositories/snapshots/'
+    }
+  }
+
+  dependencies {
+    classpath 'org.standardout.unpuzzle:unpuzzle-plugin:0.0.23-SNAPSHOT'
+  }
+}
+
+apply plugin: 'org.akhikhl.unpuzzle'
+
+...
+```
 
 
 ![Unpuzzle logo](media/logo.png "Unpuzzle logo")
