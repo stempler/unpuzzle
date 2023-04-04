@@ -3,34 +3,31 @@
 
 apply plugin: 'java'
 apply plugin: 'groovy'
-apply plugin: 'maven' // need this for installing artifacts locally
+apply plugin: 'maven-publish' // need this for installing artifacts locally
+
 
 repositories {
   mavenLocal()
-  jcenter()
+  mavenCentral()
   // needed by org.apache.maven:maven-ant-tasks:2.1.4-SNAPSHOT :
-  maven { url 'http://repository.apache.org/content/groups/snapshots' }
+  maven {
+    url 'http://repository.apache.org/content/groups/snapshots'
+    allowInsecureProtocol = true
+  }
 }
 
 group = rootProject.group
 version = rootProject.version
 
 dependencies {
-  if(gradle.gradleVersion.startsWith('1.'))
-    testCompile "org.codehaus.groovy:groovy-backports-compat23:$groovy_version"
-  testCompile "org.spockframework:spock-core:${spock_version}", {
+  testImplementation "org.spockframework:spock-core:${spock_version}", {
     exclude group: 'org.codehaus.groovy', module: 'groovy-all'
   }
-  testCompile "org.codehaus.groovy:groovy-all:${groovy_version}"
+  testImplementation "org.codehaus.groovy:groovy-all:${groovy_version}"
 }
 
-sourceCompatibility = '1.6'
-targetCompatibility = '1.6'
-
-// lib projects should be always installed into "$HOME/.m2"
-project.tasks.build.finalizedBy project.tasks.install
-rootProject.tasks.buildExamples.dependsOn project.tasks.build
-rootProject.tasks.buildExamples.dependsOn project.tasks.install
+sourceCompatibility = '13'
+targetCompatibility = '13'
 
 task sourcesJar(type: Jar, dependsOn: classes, description: 'Creates sources jar') {
   classifier = 'sources'

@@ -2,7 +2,11 @@ apply from: rootProject.file('libs/common.gradle')
 apply from: rootProject.file('libs/publish.gradle')
 
 dependencies {
-  compile project(':libs:unpuzzle-eclipse2maven')
-  compile gradleApi()
+  implementation "org.codehaus.groovy:groovy-all:${groovy_version}"
+  compileOnly 'org.osgi:osgi.core:7.0.0'
+  implementation 'commons-io:commons-io:2.11.0'
+  implementation project(':libs:unpuzzle-eclipse2maven')
+  implementation project(':libs:unpuzzle-osgi2maven')
+  implementation gradleApi()
 }
 

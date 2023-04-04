@@ -1,10 +1,14 @@
+
 apply from: rootProject.file('libs/common.gradle')
 apply from: rootProject.file('libs/publish.gradle')
 
 dependencies {
-  compile project(':libs:unpuzzle-osgi2maven')
-  compile project(':libs:unpuzzle-utils')
-  compile 'commons-codec:commons-codec:1.9'
-  compile "ch.qos.logback:logback-classic:$logback_version"
-  compile 'biz.aQute.bnd:bndlib:2.4.0'
+  compileOnly 'org.osgi:osgi.core:7.0.0'
+  implementation 'commons-io:commons-io:2.11.0'
+  implementation "org.codehaus.groovy:groovy-all:${groovy_version}"
+  implementation project(':libs:unpuzzle-osgi2maven')
+  implementation project(':libs:unpuzzle-utils')
+  implementation 'commons-codec:commons-codec:1.15'
+  implementation "ch.qos.logback:logback-classic:$logback_version"
+  implementation 'biz.aQute.bnd:bndlib:2.4.0'
 }

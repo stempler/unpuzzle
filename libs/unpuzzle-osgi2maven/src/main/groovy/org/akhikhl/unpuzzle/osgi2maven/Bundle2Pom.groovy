@@ -47,16 +47,17 @@ final class Bundle2Pom {
       pom.manifest = new JarFile(bundleFileOrDirectory).manifest
     }
 
-    pom.artifact = pom.manifest.attr.getValue(Constants.BUNDLE_SYMBOLICNAME)
+    pom.artifact = pom.manifest.mainAttributes.getValue(Constants.BUNDLE_SYMBOLICNAME)
+
     if (pom.artifact.contains(';'))
       pom.artifact = pom.artifact.split(';')[0]
     pom.artifact = pom.artifact.trim()
 
     pom.group = group ?: pom.artifact
     pom.dependencyGroup = dependencyGroup
-    pom.version = pom.manifest.attr.getValue(Constants.BUNDLE_VERSION)
+    pom.version = pom.manifest.mainAttributes.getValue(Constants.BUNDLE_VERSION)
 
-    parseDependencyBundles(pom.dependencyBundles, pom.manifest.attr.getValue(Constants.REQUIRE_BUNDLE))
+    parseDependencyBundles(pom.dependencyBundles, pom.manifest.mainAttributes.getValue(Constants.REQUIRE_BUNDLE))
 
     return pom
   }

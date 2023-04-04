@@ -11,3 +11,4 @@ libs/*/bin
 
 # Linux
 *~
+.idea/*
