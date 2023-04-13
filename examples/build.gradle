@@ -1,4 +1,3 @@
 apply plugin: 'base' // add "clean" task to the root project.
 
-task('build')
 

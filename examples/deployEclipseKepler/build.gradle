@@ -1,9 +1,13 @@
 buildscript {
-  apply plugin: 'maven'
-  
+
+  plugins {
+    id 'maven-publish'
+  }
+
+
   repositories {
     mavenLocal()
-    jcenter()
+    mavenCentral()()
     maven { url 'http://oss.jfrog.org/artifactory/oss-snapshot-local' }
   }
 
@@ -51,7 +55,7 @@ shell.evaluate(project.file('eclipseDownloadConfig.groovy'))
 project.ext.eclipseGroup = binding.group
 project.ext.eclipseSources = eclipseSources
 
-task('downloadEclipse') {
+task downloadEclipse {
   File markerFile = new File(buildDir, 'eclipseDownloaded')
   outputs.file markerFile
   doLast {
@@ -61,7 +65,7 @@ task('downloadEclipse') {
   }
 }
 
-task('installEclipse') {
+task installEclipse {
   dependsOn project.tasks.downloadEclipse
   File outputMarkerFile = new File(buildDir, 'eclipseArtifactsInstalled')
   outputs.file outputMarkerFile
@@ -72,7 +76,7 @@ task('installEclipse') {
   }
 }
 
-task('uploadEclipse') {
+task uploadEclipse {
   dependsOn project.tasks.downloadEclipse
   doLast {
     def corporateDeployment = rootProject.ext.corporateDeployment

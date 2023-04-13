@@ -1,7 +1,7 @@
 // include this file in subprojects:
 // apply from: rootProject.file('libs/publish.gradle')
 
-apply plugin: 'maven'
+apply plugin: 'maven-publish'
 apply plugin: 'signing'
 
 // define artifacts for upload
@@ -11,69 +11,92 @@ artifacts {
   archives sourcesJar
 }
 
-def configurePom(def pom, def thisProject) {
-  // ensure correct artifact ID
-  pom.artifactId = thisProject.name
-  
-  // pom file details
-  pom.project {
-     name thisProject.name
-     packaging 'jar'
-     description thisProject.description
-     url thisProject.project_website
+publishing{
+    publications{
+        mavenJava(MavenPublication){
+            artifactId = project.name
+            // packaging 'jar'
+            from components.java
+            pom {
+                name = project.name
+                description = project.description
+                url = project.project_website
 
-     scm {
-       url thisProject.project_scm
-       connection thisProject.project_scm
-       developerConnection thisProject.project_scm
-     }
+                scm {
+                    url = project.project_scm
+                    connection = project.project_scm
+                    developerConnection = project.project_scm
+                }
 
-     licenses {
-       license {
-         name thisProject.license
-         url thisProject.license_url
-         distribution 'repo'
-       }
-     }
+                licenses {
+                    license {
+                        name = project.license
+                        url = project.license_url
+                        distribution = 'repo'
+                    }
+                }
 
-     developers {
-       developer {
-         id thisProject.developerId
-         name thisProject.developerName
-         email thisProject.developerEmail
-       }
-     }
-   }
-}
-
-install {
-  repositories.mavenInstaller {
-    // ensure correct artifact ID when installing locally
-    configurePom(pom, project)
-  }
+                developers {
+                    developer {
+                        id = project.developerId
+                        name = project.developerName
+                        email = project.developerEmail
+                    }
+                }
+            }
+        }
+    }
 }
 
 // sign all artifacts
 signing {
-  required { gradle.taskGraph.hasTask(uploadArchives) }
-  sign configurations.archives
+    required { gradle.taskGraph.hasTask(uploadArchives) }
+    sign configurations.archives
 }
 
-uploadArchives {
-  repositories {
-    mavenDeployer {
-      // sign artifacts before upload
-      beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-      
-      // upload to sonatype OSS (snapshot/release)
-      repository(url: this.version.endsWith('-SNAPSHOT') ?
-          'https://oss.sonatype.org/content/repositories/snapshots' :
-          'https://oss.sonatype.org/service/local/staging/deploy/maven2') {
-        authentication(userName: this.hasProperty('sonatypeUsername') ? sonatypeUsername : '',
-          password: this.hasProperty('sonatypePassword') ? sonatypePassword : '')
-      }
-      
-      configurePom(pom, project)
+subprojects {
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                // sign artifacts before upload
+                beforeDeployment { MavenPublication deployment -> signing.signPom(deployment) }
+
+                // upload to sonatype OSS (snapshot/release)
+                repository(url: this.version.endsWith('-SNAPSHOT') ?
+                        'https://oss.sonatype.org/content/repositories/snapshots' :
+                        'https://oss.sonatype.org/service/local/staging/deploy/maven2') {
+                    authentication(userName: this.hasProperty('sonatypeUsername') ? sonatypeUsername : '',
+                            password: this.hasProperty('sonatypePassword') ? sonatypePassword : '')
+                }
+
+                pom {
+                    name = project.name
+                    description = project.description
+                    url = project.project_website
+
+                    scm {
+                        url = project.project_scm
+                        connection = project.project_scm
+                        developerConnection = project.project_scm
+                    }
+
+                    licenses {
+                        license {
+                            name = project.license
+                            url = project.license_url
+                            distribution = 'repo'
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id = project.developerId
+                            name = project.developerName
+                            email = project.developerEmail
+                        }
+                    }
+                }
+            }
+        }
     }
-  }
 }

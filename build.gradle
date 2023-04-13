@@ -1,7 +1,11 @@
 buildscript {
   repositories {
     mavenLocal()
-    jcenter()
+    mavenCentral()
+    maven{
+      url 'http://repository.apache.org/content/groups/snapshots'
+      allowInsecureProtocol = true
+    }
   }
 
 }
@@ -24,22 +28,20 @@ if( !hasProperty( 'bintrayUser' ) )
 if( !hasProperty( 'bintrayApiKey' ) )
   ext.bintrayKey = ''
 
-task('build')
-
-task('buildExamples', type: GradleBuild) { task ->
+task buildExamples (type: GradleBuild) {
   dir = file('examples')
   tasks = [ 'build' ]
 }
 
 // build.finalizedBy buildExamples
 
-task('cleanExamples', type: GradleBuild) { task ->
+task cleanExamples( type: GradleBuild) {
   dir = file('examples')
   tasks = [ 'clean' ]
 }
 
 // clean.dependsOn cleanExamples
 
-task('wrapper', type: Wrapper) {
-  gradleVersion = '2.3'
+wrapper {
+  gradleVersion = '7.5.1'
 }
