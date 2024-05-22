@@ -105,6 +105,29 @@ class Deployer {
       ant.zip(basedir: sourceFile, destfile: zipFile)
       sourceFile = zipFile
     }
+
+    int retries = 3 //TODO make configurable?
+    boolean success = false
+    Throwable lastError = null
+
+    while (!success && retries >= 0) {
+      retries--
+      try {
+        doDeploy(pomFile, bundleFile, sourceFile)
+        success = true
+      } catch (Exception e) {
+        lastError = e
+
+        //TODO only retry for specific errors? (e.g. we could check if one of the causes is a org.apache.maven.wagon.TransferFailedException)
+      }
+    }
+
+    if (!success) {
+      throw lastError
+    }
+  }
+
+  private void doDeploy(File pomFile, File bundleFile, File sourceFile) {
     ant.with {
       pom id: 'mypom', file: pomFile
       deploy file: bundleFile, {
